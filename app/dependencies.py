@@ -1,13 +1,31 @@
-from typing import Annotated
+from typing import Any, AsyncGenerator
 
-from fastapi import Header, HTTPException
+from app.database import get_async_database, dispose_async_database
+from app.service.business.youtube import YouTubeBusinessService
+from app.service.end_point.youtube import YouTubeEndPointService
+
+async def get_youtube_business_service() -> AsyncGenerator[YouTubeBusinessService, Any]:
+    """
+    Dependency injector for YouTubeBusinessService
+    """
+    service = YouTubeBusinessService()
+    try:
+        yield service
+    finally:
+        await service.close()
+
+async def get_youtube_endpoint_service() -> AsyncGenerator[YouTubeEndPointService, Any]:
+    """
+    Dependency injector for YouTubeEndPointService
+    """
+    service = YouTubeEndPointService()
+    try:
+        yield service
+    finally:
+        await service.close()
 
 
-async def get_token_header(x_token: Annotated[str, Header()]):
-    if x_token != "fake-super-secret-token":
-        raise HTTPException(status_code=400, detail="X-Token header invalid")
-
-
-async def get_query_token(token: str):
-    if token != "jessica":
-        raise HTTPException(status_code=400, detail="No Jessica token provided")
+async def get_async_session():
+    AsyncSessionLocal = get_async_database()
+    async with AsyncSessionLocal() as session:
+        yield session
