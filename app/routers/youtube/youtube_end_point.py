@@ -3,6 +3,8 @@ Author: sg.kim
 Date: 2025-04-24
 Description:
 """
+import traceback
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,3 +38,46 @@ async def get_videos_with_comments(
         raise exc
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/process_korean_wave/{page_size}", summary="Process Korean Wave status for stored videos")
+async def process_korean_wave_endpoint(page_size: int = 50):
+    """
+    Endpoint to trigger batch processing of videos:
+    - Fetch videos in pages
+    - Analyze with NLP
+    - Update DB with Korean Wave status
+
+    Optional query param:
+    - page_size: number of videos per page (default: 50)
+    """
+    service = YouTubeEndPointService()
+    try:
+        result = await service.process_korean_wave_status(page_size)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await service.close()
+
+    return result
+
+
+@router.get("/process_sentiment_comment/{page_size}", summary="Process Sentiment analysis comment")
+async def process_sentiment_comment(page_size: int = 50):
+    """
+    Endpoint to trigger batch processing of videos:
+    - Fetch videos in pages
+    - Analyze with NLP
+    - Update DB with Korean Wave status
+
+    Optional query param:
+    - page_size: number of videos per page (default: 50)
+    """
+    service = YouTubeEndPointService()
+    try:
+        result = await service.process_sentiment_for_comment(page_size)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await service.close()
+
+    return result

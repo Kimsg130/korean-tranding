@@ -133,6 +133,10 @@ class YoutubeComment(SQLModel, table=True):
         None,
         sa_column_kwargs={"comment": "댓글에 받은 총 좋아요 (긍정적인 평점) 수입니다."}
     )
+    sentiment: Optional[str] = Field(
+        None,
+        sa_column_kwargs={"comment": "감성분석결과 (긍정/부정/중립)"}
+    )
     key_words: Optional[str] = Field(
         None,
         sa_column_kwargs={"comment": "해당 댓글의 키워드(','로 분리)"}

@@ -5,7 +5,9 @@ Description:
 """
 from typing import List, Dict, Optional, Tuple
 
-from sqlmodel import select, and_
+from sqlalchemy import Null
+from sqlalchemy.sql.operators import is_
+from sqlmodel import select, and_, col
 
 from app.database import get_async_database
 from app.schema.public import YoutubeComment, YoutubeVideo
@@ -16,15 +18,19 @@ class SearchBusinessService:
         self._session_factory = get_async_database()
 
     async def get_videos(self, previous_id: Optional[str], page_size: int) -> Tuple[List[YoutubeVideo], Optional[str]]:
+
+        conditions = [col(YoutubeVideo.korean_wave_yn).is_(None)]
+
+        if previous_id:
+            conditions.append(YoutubeVideo.video_id > previous_id)
+
         async with self._session_factory() as session:
             async with session.begin():
                 # 1) 해당 비디오 페이징 조회
                 stmt = (
                     select(YoutubeVideo)
                     .where(
-                        and_(
-                            YoutubeVideo.video_id > previous_id
-                        )
+                        and_(*conditions)
                     )
                     .order_by(YoutubeVideo.video_id)
                     .limit(page_size)
@@ -42,15 +48,38 @@ class SearchBusinessService:
         return videos, last_id
 
 
-    async def get_comments_for_video(self, video_id: str):
+    async def get_comments_for_video(self, previous_id: Optional[str], page_size: int) -> Tuple[List[YoutubeComment], Optional[str]]:
         """
         video_id에 속한 댓글(최상위 + 답글)을 조회 후 반환
         """
+
         async with self._session_factory() as session:
             async with session.begin():
                 # 1) 해당 비디오의 모든 댓글 조회
-                stmt = select(YoutubeComment).where(YoutubeComment.video_id == video_id)
+                stmt = (
+                    select(YoutubeComment)
+                    .join(YoutubeComment.video)  # join to YoutubeVideo
+                    .where(
+                        and_(
+                            YoutubeVideo.korean_wave_yn == 'Y',
+                            YoutubeComment.extract_yn == 'N',
+                            *(
+                                [YoutubeComment.comment_id > previous_id]
+                                if previous_id is not None else []
+                            )
+                        )
+                    )
+                    .order_by(YoutubeComment.comment_id)
+                    .limit(page_size)
+                )
                 result = await session.execute(stmt)
-                all_comments: List[YoutubeComment] = result.all()
+                all_comments: List[YoutubeComment] = result.scalars().all()
 
-        return all_comments
+        # 마지막 video_id 계산
+        last_id: Optional[str]
+        if all_comments:
+            last_id = all_comments[-1].comment_id
+        else:
+            last_id = None
+
+        return all_comments, last_id

@@ -3,9 +3,12 @@ Author: sg.kim
 Date: 2025-04-24
 Description:
 """
+import logging
 from typing import Optional, List, Dict
 
 from app.model.youtube.response import ChannelItem
+from app.service.business.nlp import NlpBusinessService
+from app.service.business.search import SearchBusinessService
 from app.service.business.transaction import TransactionBusinessService
 from app.service.business.youtube import YouTubeBusinessService
 from app.utils.text import TextUtils
@@ -19,9 +22,13 @@ class YouTubeEndPointService:
         self,
         business_service: Optional[YouTubeBusinessService] = None,
         tx_service: Optional[TransactionBusinessService] = None,
+        search_service: Optional[SearchBusinessService] = None,
+        nlp_service: Optional[NlpBusinessService] = None,
     ):
         self.business = business_service or YouTubeBusinessService()
         self.tx = tx_service or TransactionBusinessService()
+        self.search = search_service or SearchBusinessService()
+        self.nlp = nlp_service or NlpBusinessService()
 
     async def fetch_all_videos_with_comments(
         self, handle: str, video_page_limit: int = 5
@@ -110,6 +117,59 @@ class YouTubeEndPointService:
                 await self.tx.insert_youtube_comments_bulk(batch)
 
         return {"detail": "추출이 완료되었습니다"}
+
+    async def process_korean_wave_status(
+            self, page_size: int = 50
+    ) -> Dict[str, str]:
+        """
+        1) SearchBusinessService로 페이징 단위 videos 조회
+        2) NlpBusinessService로 한류 여부 판정
+        3) TransactionBusinessService로 결과 업데이트
+        """
+
+
+        print(f"page_size >> {page_size}")
+
+        previous_id: Optional[str] = None
+        while True:
+            videos, last_id = await self.search.get_videos(previous_id, page_size)
+            print(f"SELECT COUNT>> {len(videos)}")
+            if not videos:
+                break
+            # NLP 처리
+            results = await self.nlp.identify_korean_wave_for_video(videos)
+            print(f"PROCESS COUNT>> {len(results)}")
+            # DB 업데이트
+            await self.tx.update_korean_wave_status(results)
+            previous_id = last_id
+            if previous_id is None:
+                break
+
+        return {"detail": "한류 여부 처리 완료"}
+
+
+    async def process_sentiment_for_comment(
+            self, page_size: int = 50
+    ) -> Dict[str, str]:
+
+        print(f"page_size >> {page_size}")
+
+        previous_id: Optional[str] = None
+        while True:
+            comments, last_id = await self.search.get_comments_for_video(previous_id, page_size)
+            print(f"SELECT COUNT>> {len(comments)}")
+            if not comments:
+                break
+            # NLP 처리
+            results = await self.nlp.identify_sentiment_for_comments(comments)
+            print(f"PROCESS COUNT>> {len(results)}")
+            # DB 업데이트
+            await self.tx.update_sentiment_for_comments(results)
+            previous_id = last_id
+            if previous_id is None:
+                break
+
+        return {"detail": "감성 분석 및 키워드 추출 완료"}
 
     async def close(self):
         await self.business.close()

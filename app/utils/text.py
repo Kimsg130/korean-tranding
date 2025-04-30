@@ -3,7 +3,8 @@ Author: sg.kim
 Date: 2025-04-25
 Description:
 """
-import codecs
+import codecs, re
+import json
 from datetime import datetime, timezone
 
 
@@ -24,3 +25,15 @@ class TextUtils:
     def unescape_control_chars(s: str) -> str:
         # 저장된 이스케이프 문자열을 원래 텍스트로 복원
         return codecs.decode(s, "unicode_escape")
+
+    @staticmethod
+    def parse_response_with_regex(raw: str):
+        # 1) ```json 또는 ``` 제거
+        no_fence = re.sub(r"```(?:json)?\s*", "", raw)
+        # 2) 남은 트레일링 ``` 제거
+        no_fence = re.sub(r"\s*```$", "", no_fence)
+
+        json_str = no_fence.replace("'", '"')
+
+        # 3) JSON 파싱
+        return json.loads(json_str)
